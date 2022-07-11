@@ -3,15 +3,17 @@ Distributed Reinforcement Learning
 
 Problem Definition and Research Motivation
 -------------------
-Distributed reinforcement learning (Distributed RL) is the only way for deep reinforcement learning to be applied to large-scale applications and solve complex decision spaces and long-term planning problems. 为了解决像星际争霸2（SC2） [1]_ 和 DOTA2 [2]_ 这样超大规模的决策问题，单进程乃至单机器的算力是远远不够的，需要将整个训练管线中的各个部分拓展到各种各样的计算和存储设备上。研究者们希望设计一整套“算法+系统”的方案，能够让 DRL 训练程序便捷地运行在各种不同的计算尺度下，在保证算法优化收敛性的同时，尽可能地提升其中各个环节的效率。
+Distributed reinforcement learning (Distributed RL) is the only way for deep reinforcement learning to be applied to large-scale applications and solve complex decision spaces and long-term planning problems. In order to solve super-large-scale decision-making problems like StarCraft 2 (SC2) [1]_ and DOTA2 [2]_, the computing power of a single process or even a single machine is far from enough, and it is necessary to expand each part of the entire training pipeline and to a wide variety of computing and storage devices. The researchers hope to design a complete set of "algorithm + system" solution, which can allow the DRL training program to easily run under various computing scales, and improve the efficiency of each link as much as possible while ensuring the convergence of algorithm optimization. 
 
-一般来说，一个强化学习训练程序有三类核心模块，用于和环境交互产生数据的 Collector，其中包含环境本身（Env）和产生动作的 Actor，以及使用这些数据进行训练的 Learner，他们各自需要不同数量和类型的计算资源支持。而根据算法和环境类型的不同，又会有一些延伸的辅助模块，例如大部分 off-policy 算法都会需要数据队列（Replay Buffer）来存储训练数据，对于 model-based RL 相关的算法又会有学习环境 dynamics 的相关训练模块，而对于需要大量自我博弈（self-play）的算法，还需要一个中心化的 Coordinator 去控制协调各个组件（例如动态指定自己博弈的双方）。
+Generally speaking, a reinforcement learning training program has three types of core modules, the Collector for interacting with the Environment (Env) to generate data, which contains the environment itself and the Actor that generates actions, and the Learner for training using these data, each of which requires different number and types of computing resources supported.
 
-在系统角度，需要让整个训练程序中的同类模块有足够的并行扩展性，例如可以根据需求增加进行交互的环境数量（消耗更多的CPU），或是增加训练端的吞吐量（通用需要使用更多的GPU），而对于不同的模块，又希望能够尽可能地让所有的模块可以异步执行，并减小模块时间各种通信方式的代价（网络通信，数据库，文件系统）。但总的来说，一个系统的效率优化的理论上限是——Learner 无等待持续高效训练，即在 Learner 一个训练迭代高效完成时，下一个训练迭代的数据已经准备好。
+Depending on the type of algorithm and environment, there will be some extended auxiliary modules. For example, most off-policy algorithms will require a data queue (Replay Buffer) to store training data, and there will be learning for model-based RL-related algorithms. The relevant training modules of environmental dynamics, and for algorithms that require a large number of self-play (self-play), a centralized Coordinator is also required to control and coordinate various components (such as dynamically specifying both sides of the game).
 
-在算法角度，则是希望在保证算法收敛性的情况下，降低算法对数据产生吞吐量的要求（例如容忍更旧更 off-policy 的数据），提高数据探索效率和对于已收集数据的利用效率（例如修改数据采样方法，或是结合一些 RL 中 data-efficiency 相关的研究），从而为系统设计提供更大的空间和可能性。
+From a system perspective, it is necessary to allow sufficient parallel scalability for similar modules in the entire training program. For example, the number of interacting environments can be increased according to demand (consume more CPU), or the throughput of the training side can be increased (generally, more for different modules, it is hoped that all modules can be executed asynchronously as much as possible, and the cost of various communication methods (network communication, database, file system) for module time is reduced. But in general, the theoretical upper limit of the efficiency optimization of a system is that the Learner can continuously train efficiently without waiting, that is, when the Learner completes one training iteration efficiently, the data for the next training iteration is ready.
 
-综上所述，分布式强化学习是一个更加综合的研究子领域，需要深度强化学习算法 + 分布式系统设计的互相感知和协同。
+From the algorithm point of view, it is hoped to reduce the algorithm’s requirements for data throughput (such as tolerating older and more off-policy data) while ensuring the convergence of the algorithm, and to improve the efficiency of data exploration and utilization of collected data (For example, modify the data sampling method, or combine some research related to data-efficiency in RL). So that it provides more space and possibilities for system design.
+
+To sum up, distributed reinforcement learning is a more comprehensive research subfield, which requires mutual perception and coordination of deep reinforcement learning algorithm + distributed system design.
 
 
 Research Direction
