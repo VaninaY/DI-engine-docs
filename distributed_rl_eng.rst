@@ -27,30 +27,30 @@ For common decision problems, the two most commonly used distributed architectur
 .. image:: ./images/impala.png
   :align: center
   
-- 前者是经典的 Actor-Learner 模式，即数据收集和训练端完全分离，定期从 Learner 到 Actor 传递最新的神经网络模型，而 Actor 在收集到一定量的数据后（即 observations）发送给 Learner。如果有多个 Learner，他们还会定期同步神经网络的梯度（即分布式深度学习中的数据并行模式）。
+- The former is the classic Actor-Learner mode, that is, the data collection and training sides are completely separated, and the latest neural network model is regularly passed from the Learner to the Actor, and the Actor is sent to the Learner after collecting a certain amount of data (i.e. observations). If there are multiple Learners, they also periodically synchronize the gradients of the neural network (i.e. the data-parallel mode in distributed deep learning).
 
 .. image:: ./images/seed_rl.png
   :scale: 50%
   :align: center
 
-- 后者在前者的基础上，致力于去优化传输模型的损耗，SEED RL将用于推理产生动作的部分剥离出来，也和训练端放在一起，通过高效的 TPU 间通信技术来更新模型，从而大大减少了 IMPALA 中传递模型的代价，而对于环境和推理 Actor 之间的跨机器通信，SEED RL 使用优化过的gRPC方案来传递 observation 和 action，从而并不会有太大的负担。
+- On the basis of the former, the latter is dedicated to optimizing the loss of the transmission model. SEED RL strips out the part used for inference to generate actions, and puts it together with the training end to update the model through efficient inter-TPU communication technology. The cost of passing the model in IMPALA is greatly reduced, and for cross-machine communication between the environment and the reasoning Actor, SEED RL uses an optimized gRPC scheme to pass the observation and action, so there is not much burden.
 
 .. note::
-  这两种方案并没有绝对的谁优谁劣，关键在于对于一个实际的决策问题，究竟是跨机器传输模型的代价更大，还是跨机器传输 observation 和 action 等数据的代价更大，如果是前者，且有比较好的 GPU/TPU 间通信组件，那么 SEED RL 是更好的解决方案，如果是后者，IMPALA是比较稳定的选择。还有，IMPALA 可以累积一批数据后进行数据传递，而 SEED RL 需要每个交互帧都存在数据传输，这属于经典的数据批处理和流处理对比问题，对于目前的机器学习社区前者一般会更简便易用。此外，如果整个训练程序需要更高的自由度和定制化，例如动态控制 Actor 的一些行为，IMPALA 会更为方便一些。
+There is no absolute superiority or inferiority between these two schemes. The key lies in the fact that for a practical decision-making problem, whether it is more expensive to transmit models across machines, or more expensive to transmit observation and action data across machines, if it is the former , and there are better communication components between GPU/TPU, then SEED RL is a better solution, if it is the latter, IMPALA is a more stable choice. In addition, IMPALA can accumulate a batch of data for data transmission, while SEED RL requires data transmission in each interactive frame. This is a classic data batch and stream processing comparison problem. For the current machine learning community, the former is generally more complex. Ease of use. Also, if the entire training procedure requires a higher degree of freedom and customization, such as dynamically controlling some behavior of the Actor, IMPALA is more convenient.
 
-在上述两种架构之外，还有很多其他的分布式强化学习设计方案，例如引入异步神经网络更新方案的 A3C [5]_ 和 Gossip A2C [6]_，为了支持大规模自我博弈，设计出复杂 League 机制的 AlphaStar [1]_，结合 model-based RL 和 MCTS 相关模块的 MuZero [7]_，这里就不一一叙述了，有兴趣的读者可以参考具体论文或是参考我们的 `算法攻略合集部分 <../12_policies/index_zh.html>`_。
+In addition to the above two architectures, there are many other distributed reinforcement learning design schemes, such as A3C [5]_ and Gossip A2C [6]_ that introduce asynchronous neural network update schemes, In order to support large-scale self-play, AlphaStar [1]_ with a complex League mechanism was designed, and MuZero [7]_ combined with model-based RL and MCTS-related modules will not be described here. Interested readers can refer to the specific Papers or refer to our `Algorithm Raiders Collection section <../12_policies/index_zh.html>`_.
 
-单点效率优化
+Single Point Efficiency Optimization
 ^^^^^^^^^^^^^
-除了整体结构的设计和创新，还有很多对于整个训练程序中某一单点模块进行优化的方法，它们主要是针对某一个子问题，进行专门的定制优化，这里介绍一些主要的方法：
+In addition to the design and innovation of the overall structure, there are many methods for optimizing a single-point module in the entire training program. They are mainly customized and optimized for a certain sub-problem. Here are some main methods:
 
-- ``Object Store`` in Ray/RLLib [8]_: 对于多进程多机器之间的数据传递，Ray/RLLib中的 Object Store 提供了一种非常便捷高效的方式，任何一个进程，只要知道了这个对象的引用（即reference），就可以通过向 Store 请求获取相应的值，而具体内部的数据传输完全由 Store 进行管理，这样就可以像写本地单进程程序一样，实现一个分布式训练程序。Object Store 的具体实现是结合 redis，plasma和gRPC完成。
+- ``Object Store`` in Ray/RLLib [8]_: For data transfer between multiple processes and multiple machines, the Object Store in Ray/RLLib provides a very convenient and efficient way. As long as any process knows the reference of this object (that is, the reference), it can request the Store by requesting it. Obtain the corresponding value, and the specific internal data transmission is completely managed by the Store, so that a distributed training program can be implemented like writing a local single-process program. The specific implementation of Object Store is completed by combining redis, plasma and gRPC.
 
-- ``Sample Factory`` [9]_: Sample Factory 针对单台机器规模的 APPO 算法做了定制化优化，精心设计了一种环境和产生动作的策略之间的异步化方案，并利用 shared memory 大幅提高各模块之间的传输效率。
+- ``Sample Factory`` [9]_: Sample Factory has customized and optimized the APPO algorithm at the scale of a single machine, carefully designed an asynchronous scheme between the environment and the action-generating strategy, and used shared memory to greatly improve the transmission efficiency between modules.
 
-- ``Reverb`` in Acme [10]_: Reverb 提供了一套高灵活度和高效率的数据操作和管理模块，对于RL，很适合用来实现 replay buffer 相关组件。
+- ``Reverb`` in Acme [10]_: Reverb provides a set of highly flexible and efficient data manipulation and management modules. For RL, it is very suitable for implementing replay buffer related components.
 
-- ``envpool`` [11]_: envpool 是目前最快的环境向量化并行方案，利用 c++ threadpool 和许多经典 RL 环境的高效实现，提供了强大的异步向量化环境仿真能力。
+- ``envpool`` [11]_: envpool is currently the fastest environment vectorized parallel solution, using c++ threadpool and efficient implementation of many classic RL environments to provide powerful asynchronous vectorized environment simulation capabilities.
 
 
 Algorithm
@@ -58,30 +58,29 @@ Algorithm
 
 Reduce the throughput requirements of the algorithm for data generation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-- ``V-trace`` in IMPALA [3]_: off-policy 算法可以拓宽可供训练的数据范围，从而一定程度上提高算法对于旧数据的容忍程度，降低 Collector 端产生数据的吞吐压力，但是过于 off-policy 的数据很容易影响算法的收敛性，IMPALA 中针对这个问题，利用重要性采样机制和相应的裁剪手段，设计了分布式训练设置下一种较稳定的算法方案 V-trace，限制 off-policy 数据对优化本身的负面影响。
+- ``V-trace`` in IMPALA [3]_: The off-policy algorithm can widen the range of data available for training, thereby improving the algorithm's tolerance for old data to a certain extent and reducing the throughput pressure of the data generated by the Collector, but the data that is too off-policy can easily affect the convergence of the algorithm. Aiming at this problem, IMPALA uses the importance sampling mechanism and the corresponding clipping method to design a relatively stable algorithm scheme V-trace under the distributed training setting, which limits the negative impact of off-policy data on the optimization itself.
 
-- ``Reuse`` and ``Staleness`` in OpenAI FIVE [2]_: 在 OpenAI 针对 DOTA2 设计的智能体中，他们进行了一些关于数据重用次数（Reuse）和折旧程度（Staleness）的实验，过高的重用次数和过旧的数据都会影响大规模训练中 PPO 算法的稳定性。
+- ``Reuse`` and ``Staleness`` in OpenAI FIVE [2]_: In the agent designed by OpenAI for DOTA2, they conducted some experiments on the number of data reuse (Reuse) and the degree of depreciation (Staleness). Excessive number of reuse and too old data will affect the stability of the PPO algorithm in large-scale training.
 
 Improve data exploration efficiency + utilization efficiency of collected data
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-- ``Data Priority and Diversity``——Ape-x [12]_: Ape-x是一种经典的分布式强化学习方案，其中一个核心做法就是利用 Priority Experience Replay，为不同的数据设置不同的采样优先级，让算法更加关注那些“重要”的数据。此外，Ape-x还在不同的并行 Collector 中设置不同的探索参数（即eps greedy的epsilon）来提升数据多样性。
+- ``Data Priority and Diversity``——Ape-x [12]_: Ape-x is a classic distributed reinforcement learning scheme. One of the core practices is to use Priority Experience Replay to set different sampling priorities for different data, so that the algorithm pays more attention to those "important" data. In addition, Ape-x also sets different exploration parameters (ie epsilon of eps greedy) in different parallel collectors to improve data diversity.
 
-- ``Representation Learning`` in RL——CURL [13]_: 对于一些高维或多模态的输入，可以结合表示学习方法来提升 RL 的数据利用效率，例如对于高维图像输入的控制问题，CURL 引入额外的对比学习过程，RL 在学习到的特征空间上进行决策。而从系统设计来看，表征学习和强化学习训练结合也有很多优化空间，例如两者的异步。
+- ``Representation Learning`` in RL——CURL [13]_: For some high-dimensional or multi-modal inputs, the representation learning method can be combined to improve the data utilization efficiency of RL. For example, for the control problem of high-dimensional image input, CURL introduces an additional contrastive learning process, and RL is based on the learned feature space for decision-making. From the perspective of system design, there is also a lot of room for optimization in the combination of representation learning and reinforcement learning training, such as the asynchrony of the two.
 
-- ``Model-based/MCTS RL``——MuZero [7]_: MuZero将 model-based RL 和 MCTS RL结合在一起来提升整体的训练效率，其中包含诸多独有的模块，例如 MCTS 的搜索过程，数据在训练前的 reanalyze 过程等等，相应也会引出更为复杂和多样的分布式强化学习训练系统。
-
+- ``Model-based/MCTS RL``——MuZero [7]_: MuZero combines model-based RL and MCTS RL to improve the overall training efficiency, which includes many unique modules, such as the search process of MCTS, the reanalyze process of data before training, etc., which will lead to more complicated and diverse distributed reinforcement learning training systems.
 
 Future Study
 ---------
 
-目前，分布式强化学习还只是一个新兴的研究子领域，很多情况下会受限于算力和问题环境，仍然存在很多需要被解决的问题：
+At present, distributed reinforcement learning is only an emerging research subfield. In many cases, it is limited by computing power and problem environment. There are still many problems that need to be solved:
 
-- 缺少统一的 benchmark 来评价分布式强化学习算法和系统的效率；
+- Lack of a unified benchmark to evaluate the efficiency of distributed reinforcement learning algorithms and systems;
 
-- 目前大部分分布式强化学习方案都只适用于一小部分环境和一部分 RL 算法，距离技术的通用化还有很远的路要走；
+- At present, most distributed reinforcement learning solutions are only suitable for a small part of the environment and part of the RL algorithm, and there is still a long way to go before the generalization of the technology;
 
-- 当前的系统优化和 RL 算法本身仍然是隔离的，可以考虑感知 RL 优化需求的系统设计，例如动态资源感知和调度
+- Current system optimization and RL algorithms themselves are still isolated, and system designs that sense RL optimization needs can be considered, such as dynamic resource awareness and scheduling.
 
 
 Reference
